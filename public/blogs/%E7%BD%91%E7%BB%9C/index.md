@@ -12,7 +12,7 @@
 
 ## IP层
 
-每台互联网中的主机都运行实现`TCP/IP`协议，并且所有现代计算都支持这个协议。互联网中的客户端与服务端混合使用套接字(socket)接口函数与Unix的I/O函数进行通信。
+每台互联网中的主机都运行实现`TCP/IP`协议，并且所有现代计算都支持这个协议。互联网中的客户端与服务端混合使用套接字(socket)接口函数与Unix的I/O函数进行通信。![](https://ember-img.oss-cn-chengdu.aliyuncs.com/Byte_order1.png)
 
 ### ip地址
 
