@@ -61,6 +61,13 @@
 			"value": "2508856440@qq.com",
 			"label": "",
 			"order": 1
+		},
+		{
+			"id": "button-1765041186580",
+			"type": "zhihu",
+			"value": "https://www.zhihu.com/people/low-45-75",
+			"label": "知乎",
+			"order": 4
 		}
 	],
 	"clockShowSeconds": false
