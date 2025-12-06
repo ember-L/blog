@@ -74,5 +74,5 @@
 			"order": 4
 		}
 	],
-	"clockShowSeconds": false
+	"clockShowSeconds": true
 }
