@@ -1,26 +1,26 @@
 {
 	"meta": {
 		"title": "Ember🍐的博客",
-		"description": "Ember🍐的个人博客，记录前端开发、探索、笔记。前端 UI 更新代码仓库。",
+		"description": "Ember🍐的个人博客，记录全栈、系统、AI、大数据开发记录",
 		"username": "Ember🍐"
 	},
 	"theme": {
-		"colorBrand": "#de4331",
-		"colorPrimary": "#4E3F42",
+		"colorBrand": "#35bfab",
+		"colorPrimary": "#334f52",
 		"colorSecondary": "#7b888e",
-		"colorBrandSecondary": "#FCC841",
+		"colorBrandSecondary": "#1fc9e7",
 		"colorBg": "#eeeeee",
 		"colorBorder": "#ffffff",
 		"colorCard": "#ffffff66",
 		"colorArticle": "#ffffffcc"
 	},
 	"backgroundColors": [
-		"#FCC841",
-		"#DFEFFC",
-		"#DEDE92",
-		"#DE4331",
-		"#FE9750",
-		"#FCC841"
+		"#EDDD62",
+		"#9EE7D1",
+		"#84D68A",
+		"#EDDD62",
+		"#88E6E5",
+		"#a7f3d0"
 	],
 	"artImages": [
 		{
@@ -32,7 +32,7 @@
 			"url": "/images/art/a46372ff45bc5524.jpg"
 		}
 	],
-	"currentArtImageId": "a46372ff45bc5524",
+	"currentArtImageId": "cat",
 	"backgroundImages": [
 		{
 			"id": "",
@@ -44,21 +44,21 @@
 		{
 			"id": "github",
 			"type": "github",
-			"value": "https://github.com/yysuni",
+			"value": "https://github.com/ember-L",
 			"label": "Github",
 			"order": 3
 		},
 		{
 			"id": "juejin",
-			"type": "juejin",
-			"value": "https://juejin.cn/user/2427311675422382",
-			"label": "稀土掘金",
+			"type": "qq",
+			"value": "2508856440",
+			"label": "QQ",
 			"order": 2
 		},
 		{
 			"id": "email",
 			"type": "email",
-			"value": "yysuni1001@gmail.com",
+			"value": "2508856440@qq.com",
 			"label": "",
 			"order": 1
 		}
