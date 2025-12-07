@@ -6,10 +6,10 @@
 		"url": "https://github.com/ember-L/teaching-mapreduce",
 		"description": "用于高中的技能体验课，让他们体验分布式系统的调度，以简单的mapreduce的网页ui，带领学生快速认识大数据的原理",
 		"tags": [
-			"(大数据",
-			"教学)"
+			"大数据",
+			"教学"
 		],
-		"github": "https://github.com/ember-L/teaching-mapreduce"
+		"github": "httpxs://github.com/ember-L/teaching-mapreduce"
 	},
 	{
 		"name": "智痘",
@@ -18,10 +18,10 @@
 		"url": "http://114.132.243.104/",
 		"description": "智痘 - AI痤疮诊断系统\n传统医学与现代AI的完美融合，支持Web、移动端、微信小程序多平台，通过视觉诊断 + 智能问诊 + AI推理，提供个性化的痤疮评估报告和调养方案",
 		"tags": [
-			"(AI",
+			"AI",
 			"全栈",
 			"APP",
-			"医疗)"
+			"医疗"
 		]
 	}
 ]
