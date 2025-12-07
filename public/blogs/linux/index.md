@@ -1,281 +1,803 @@
-# Ubuntu环境美化
+# 线程同步
 
-安装ubuntu:[Ubuntu-24.04安装教程超详细(2024)_ubuntu24.04-CSDN博客](https://blog.csdn.net/hack_18520/article/details/143466277)
+并发编程主要涉及三个部分:
 
-## 安装软件
+- IO复用
+- 进程并发
+- 线程并发
 
-在这里会安装tweaks美化管理工具
+本文介绍线程并发中的信号量对==资源共享==的控制以及==同步机制==。
 
-```sh
-sudo apt update
-sudo apt install gnome-tweaks chrome-gnome-shell
-sudo apt install gtk2-engines-murrine gtk2-engines-pixbuf 
-sudo apt install sassc optipng inkscape libcanberra-gtk-module libglib2.0-dev libxml2-utils
+## 信号量
+
+==信号量==(semaphore)是一种特殊类型变量，用于解决同步不同执行线程问题的方法。信号量s是具有**非负整数值的全局变量**，只能由两种特殊的操作来处理，这两种操作被称为P和V。
+
+- `P(s)`：如果s是非零(>0)，那么P将s减1，并且立即返回。如果s为零，那么就挂起这个线程，直到一个V操作将s变为非零，线程被V操作重启。在重启之后，P操作将s减1，并将控制返回给调用者。
+
+  P操作中的`测试`和`减1`操作是**不可分割**的(Test-and-Set)，一旦预测信号量s变为非零，就会将s减1，不能由中断。
+
+- `V(s)`：V操作将s加1。如果任何线程阻塞在P操作等待s变成非零，那么V操作会重启这些线程中的一个，然后改线程将s减去1，完成它的P操作。
+
+  V操作中的`加1`操作也是**不可分割**的，也就是加载、加1和存储信号量的过程中没有中断。
+
+==信号量不变性==(semaphore invariant)：一个正在运行的程序绝不可能进入这样一种状态，也就是初始化了的信号量有一个负值。
+
+`注意`：V的定义中没有定义等待线程被重启的顺序。唯一的要求是V必须只能重**启一个正在等待的线程**。
+
+> Posix标准下的操作信号量的函数
+
+```c
+#include <semaphore.h>
+
+int sem_init(sem_t *sem,0,unsigned int value);
+int P(sem_t *s); /* P(s) */
+int V(sem_t *s); /* V(s) */
+											返回：若成功则为0.若出错为-1
+```
+
+- `sem_init`函数将信号量`sem`初始化为`value`。每个信号量在使用前必须**初始化**
+
+为什么方便PV的定义，我们将`P`和`V`函数包装为：
+
+```c
+void P(sem_t *sem) 
+{
+    if (P(sem) < 0)
+	unix_error("P error");
+}
+
+void V(sem_t *sem) 
+{
+    if (V(sem) < 0)
+	unix_error("V error");
+}
 ```
 
 
 
-## Gnome插件
-
-默认使用的是 gnome 的桌面环境，本文的美化也是基于 gnome 桌面环境，美化 gnome 桌面环境少不了安装 gnome 插件，gnome 插件的网址是：[https://extensions.gnome.org](https://link.zhihu.com/?target=https%3A//extensions.gnome.org)
-
-> 插件
-
-- userthemes：设置用户主题
-- netspeed：显示网速
-- Compiz alike magic lamp effect：暴风吸入式窗口最小化
-- Compiz windows effect：Q弹的窗口
-
-- blur-my-shell：将顶部的plane、dock模糊化
+> **PV操作的起源**
+>
+> Edsger Dijkstra(1930-2002)出生于荷兰，并发编程领域的先锋人物，提出了PV操作，PV也是来自于荷兰语的Proberem(测试)和Verhogen(增加)
 
 
 
-![image-20250520104557369](https://ember-img.oss-cn-chengdu.aliyuncs.com/image-20250520104557369.png)
+## 信号量实现互斥操作
 
-### 安装
+信号量提供了一种方法确保对共享变量的**互斥(mutual exclusive)访问**。基本思想是将每个共享变量与一个信号量s(初始化为1)联系起来，然后用`P(s)`和`V(s)`操作将相应的**临界区(critical section)**包围起来。
 
-1. 打开firefox打开网站[https://extensions.gnome.org](https://link.zhihu.com/?target=https%3A//extensions.gnome.org)
-2. 搜索插件，点击安装即可
+互斥访问是通过==二元信号量==实现的，信号量的值总是0或1。这种二元信号量也通常被称作为==互斥锁(mutex)==。这时PV操作也被称作为**加锁**与**解锁**。对一个互斥锁加锁但还没有解锁的进程称为**占用**了这个互斥锁。
 
-![image-20250520112516677](./assets/image-20250520112516677-1748747688740-5.png)
+```c
+/*信号量定义互斥锁*/
+sem_t mutex;
+sem_init(&mutex,0,1);
+/**/
+P(&mutex);
+V(&mutex);
+```
 
-## 主题美化
+在posix标准下线程库的有专门的互斥锁类型以及操作，如下所示：
 
-在Github上有类Macos主题：https://github.com/vinceliuice/WhiteSur-gtk-theme
+```c
+/*posix标准下线程库的互斥锁定义*/
+pthread_mutex_t mutex;
+pthread_mutex_init(&mutex, NULL);
+/*互斥锁中的PV操作*/
+pthread_mutex_lock(&mutex);
+// 临界区代码
+pthread_mutex_unlock(&mutex);
+```
 
-### 安装
 
-> 安装主题
 
-```sh
- #克隆主题仓库
- git clone https://github.com/vinceliuice/WhiteSur-gtk-theme.git --depth=1
+下面进度图展示了，如何利用二元信号量来正确地同步计数器程序示例。每个状态都标出了该状态中信号量s的值。关键思想是PV操作结合创建了一组状态，称为**禁止区**(forbidden region)，其中s<0。禁止区包括了不安全区，所以没有实际可行的轨迹能够使程序到达不安全的部分。因此任何执行轨迹线都是安全的，所以不用考虑指令顺序，程序都会正确的增加计数器值。
+
+![image-20240106145605196](./assets/image-20240106145605196.png)
+
+
+
+## PV操作共享资源
+
+除了提供互斥之外，信号量的另一个重要作用是调度对**调度共享资源的访问**。
+
+> 主要的解决过程为
+
+1. **关系分析**： 找出题目中描述的各个进程， 分析它们之间的同步、 互斥关系。
+
+2. **整理思路**： 根据各进程的操作流程确定P、 V操作的大致顺序。
+
+3. **设置信号量**： 设置需要的信号量， 并根据题目条件确定信号量初值。 （互斥信号量初值一般为 1 ， 同步信号量的初始值要看对应资源的初始值是多少） 
+
+### 一、生产者消费者问题
+
+下图表示生产者-消费者模型问题：
+
+- 生产者与消费者线程共享一个n个槽的**有限缓冲区**(共享变量)。
+
+- **生产者线程**：负责生产项目(item)，并且将其插入到缓冲区中。
+- **消费者线程**：负责不断地从缓冲区取出项目，然后消费或是使用它们。
+
+![image-20240106173234561](./assets/image-20240106173234561.png)
+
+插入和取出过程都涉及到共享变量的更新，所以必须保证对缓冲区的访问是**互斥的**，也就是生产者与消费者需要使用**同一互斥锁**(1)。
+
+同时也需要对缓冲区的访问进行**调度**(2):
+
+- **缓冲区已满**：生产者需要等待缓冲区至少有一个槽变为空。
+- **缓冲区为空**：消费者必须等待至少有一个槽有项目。
+
+消费者之间互斥，生产者之间互斥，但是生产者和消费者之间不影响。
+
+> 设计过程：
+
+- 缓冲区：`buf[n+1]`，一共有n个槽，可以放下n个项目。
+- 互斥锁：`mutex`，用于控制生产者之间、消费者之间对共享变量的访问(1)。
+- 信号量：用于对缓冲区资源的调度(2)
+  - `slots`：表示有多少个空闲槽，初始化为n。
+  - `items`：表示槽中放下多少个项目，初始化为0。
+
+
+
+```c
+sem_t mutex = 1;        //互斥信号量，实现对缓冲区的互斥访问
+sem_t slots =n;         //同步信号量，表示空闲缓冲区的数量
+sem_t items = 0;         //同步信号量,表示产品的数量，也即非空缓冲区的数量
+producer (item) 
+{ 
+    while(1) 
+    { 
+        P (&slots) ;       //消耗一个空闲缓冲区
+        
+        P (&mutex) ;       //实现互斥是 在同一进程 中进行一对 PV 操作
+        put(item); 
+        V(&mutex) ; 
+        
+        V(&items) ;        //增加一个项目
+    };
+};
  
- #运行以安装默认的 WhiteSur GTK 主题包
- ./install.sh            # install all available theme accents
+consumer ( ) 
+{ 
+    while(1) 
+    { 
+        P (&items) ;        //消耗一个产品（非空缓冲区）
+        
+        P (&mutex) ; 
+        item = get_Buf();
+        V(&mutex) ; 
+        
+        V(&slots) ;         //增加一个空闲槽
+		return item
+    };
+};
+```
+
+
+
+
+
+### 二、读者写者问题
+
+读者-写者问题是对互斥问题的概括。一组并发的线程要访问一个共享对象，如一个主存中的数据结构，或者一个磁盘上的数据库。这时有两种线程：
+
+- **读者**：这类线程只能够读取数据，可以无限多个读者**访问同一个共享对象**。读取操作不会带来竞争问题，因此在访问数据时也不需要使用互斥锁。
+- **写者**：这类线程可以修改数据，并且需要拥有对象的**独占访问权**。
+
+
+
+在基于读者与写者的优先级的情况下，这个问题有三种变体：	
+
+> 读者优先：
+
+==读者优先==要求读者不需要等待，除非把使用对象的权限赋予给一个写者。也就是读者不会因为前面有一个写者在等待而等待。
+
+- 互斥锁：`mutex`，多个读者进程访问`readcnt`共享变量需要保持互斥。
+- 信号量\互斥锁：`w`，控制对访问共享对象的临界区访问，第一个读者进入会占用该锁，直到最后一个读者退出时释放。
+- **读者计数器**：`readcnt`，记录第一个读者进入与最后一个读者退出状态，来控制`w`信号量，再调度写者的占用资源。
+
+==读者优先==主要思路是通过读者计数器判断读者线程第一个进入\最后一个退出状态，来控制写者的行为。当一个读者进入或离开临界区，如果还有读者在临界区，读者也会忽略信号量(`w`)。这样就可以实现读者会占用`w`锁，无限多读者可以进入临界区。
+
+```c
+int readcnt;
+sem_t mutex = 1,w = 1;
+
+reader(){
+    while(1){
+        P(&mutex);
+        readcnt++;
+        if(readcnt == 1) //第一个读者进入
+            P(&w);
+        V(&mutex);
+        
+        /*临界区*/
+        /*进行读取操作*/
+		
+        P(&mutex);
+        readcnt--;
+        if(readcnt == 0) //最后一个读者退出
+            V(&w);
+        V(&mutex);
+    }
+}
+
+writer(){
+    while(1){
+        P(&w);
+        
+        /*临界区*/
+        /*进行修改操作*/
+        
+        V(&w);
+    }
+}
+```
+
+
+
+思考：如果很多写者同时在请求共享资源，此时不断的有读者进入，那么就会造成==饥饿问题==(starvation)，写者会无限期的等待资源。
+
+
+
+> 写者优先：
+
+==写者优先==，要求一旦一个写者准备好写操作，它就会尽可能的完成它的写操作。也就是在第一个写者后到达的读者必须等待，即使这个写者也在等待。
+
+
+
+- 读者-写者问题的读写操作限制(仅读者优先或写者优先)：
+  - 写-写互斥，即不能有两个写者同时进行写操作。
+  - 读-写互斥，即不能同时有一个线程在读，而另一个线程在写。
+  - 读-读允许，即可以有一个或多个读者在读。
+
+==实现思路==：
+
+写者优先与读者优先类似。不同之处在于一旦一个写者到来，它应该尽快对文件进行写操作，**如果有一个写者在等待，则新到来的读者不允许进行读操作**。为此应当添加一个整型变量`writecnt`，用于记录正在等待的写者的数目，当`writecnt=0`时，才可以释放等待的读者线程队列。
+
+
+为了对全局变量`writecnt`实现互斥，必须增加一个互斥对象mutex1。
+
+
+实现**写者优先**，应当添加一个临界区对象read，当有写者在写文件或等待时，读者必须阻塞在read上。同样，有读者读时，写者必须等待。于是，必须有一个互斥对象rw来实现这个互斥。
+
+
+有写者在写时，写者必须等待。
+
+读者线程要对全局变量`readcnt`实现操作上的互斥，必须有一个互斥对象命名为`mutex1`。
+
+**信号量解析**：
+
+- `mutex1`：在写者的进入和退出中使用，对变量`writecnt`的修改，每个写者其进入区中`writecnt`加1，退出区中`writecnt`减1。
+- `mutex2`：防止一次多个读者修改`readcnt`。当`readcnt`为1的时候，为阻止写者进行写操作，申请信号量wrt，则写者就无法进行写操作了。
+- `mutex3`：主要用处就是避免**写者同时与多个读者进行竞争**，读者中信号量`rw`比`mutex3`先释放，则一旦有写者，写者可马上获得资源。
+
+- `rw`：读者和写者两个之间的互斥信号量，保证每次只读或者只写。写者优先，写者的操作应该优先于读者,直到没有写者的时候才会释放，即当`writecnt`等于1的时候，申请信号量`rw`，写者是不能同时进行写操作的。
+- `w`：保证每次只有一个写者进行写操作，当写者的数量`writecnt`等于0的时候，则证明此时没有没有读者了，释放信号量`rw`。
+
+```c
+sem_t rw = 1, mutex1 = 1, mutex2 = 1, mutex3 = 1, w = 1;
+int writecnt = 0, readcnt = 0;
+
+//读者
+void* Reader() {
+	P(&mutex3);//防止多个读者同时进入，与写者发生竞争
+    
+	P(&rw);
+	P(&mutex2);//保护readcnt共享变量
+	readcnt++;
+	if(readcnt == 1)
+		P(&w);
+	V(&mutex2);
+	V(&rw);	//rw比mutex3优先释放，此时有写者等待就唤醒写者
+	//这个区间是读者不能进入的区间，且等待的写者可以占用rw锁		
+    V(&mutex3); //若此时写者占用资源，mutex3释放后读者也不能退出
+
+	//读操作
+
+	P(&mutex2);
+	readcnt--;
+	if(readcnt == 0)
+		V(&w);//等待所以读者退出后，写者才能进行写操作
+	V(&mutex2);
+}
+
+//写者
+void* Writer() {	
+	P(&mutex1); //保护writecnt共享变量
+	writecnt++;
+	if(writecnt == 1)
+		P(&rw);
+	V(&mutex1);
+    
+	
+	P(&w);
+	//写操作
+	V(&w);
+
+	P(&mutex1);
+	writecnt--;
+	if(writecnt == 0) 
+		V(&rw);
+	
+	V(&mutex1);
+}
+```
+
+
+
+> 读写公平：
+
+使用读者优先和写者优先的混合策略。这意味着在写者到来时，如果没有正在读的读者，它可以优先执行，但如果有读者正在读，那么写者应该等待所有正在读的读者结束后才能执行。
+
+```c
+int readcnt=0;
+sem_t w=1, mutex =1, rw = 1;
+Reader()
+{
+	While(1)
+	{
+        P (&w);
+        P (&mutex);
+        if (readcnt == 0)
+	       P(&rw);
+    	readcnt++;	
+    	V (&mutex);
+        V (&w);
+		
+        //读操作
+        
+    	P (mutex);
+    	readcnt--;
+    	if (readcnt == 0)
+    		V (rw);
+    	V (mutex);
+	}
+}
  
- # 安装firefox主题
- ./tweaks.sh -f
  
- # 安装锁屏界面
- sudo ./tweaks.sh -g -b blank
-```
-
-> 安装图标
-
-```sh
-#克隆图标库
-git clone https://github.com/vinceliuice/WhiteSur-icon-theme.git
-
-#安装
-cd WhiteSur-icon-theme
-./install.sh -a #安装图标
-./install.sh -b #安装panel
+Writer()
+{     
+	While(1)
+    {
+        P(w);
+        P(rw);
+  		//写操作
+        V(rw);
+    	V(w);
+    }
+}
 ```
 
 
 
-### 设置
+### 三、哲学家就餐问题
 
-> 设置主题
+> 问题描述:
 
-使用`win+a`打开主菜单，打开`tweaks`，根据安装的主题进行设置
+一张圆桌上坐着 5 名哲学家， 每两个哲学家之间的桌上摆一根筷子， 桌子的中间是一碗米饭。 哲学 家们倾注毕生的精力用于思考和进餐， 哲学家在思考时， 并不影响他人。 只有当哲学家饥饿时， 才试图拿起左、 右两根筷子（一根一根地拿起） 。 如果筷子已在他人手上， 则需等待。 饥饿的哲 学家只有同时拿起两根筷子才可以开始进餐， 当进餐完毕后， 放下筷子继续思考。
 
-![](https://ember-img.oss-cn-chengdu.aliyuncs.com/image-20250520112305752.png)
+![image-20240106222059291](./assets/image-20240106222059291.png)
 
-## Shell美化
+将**问题抽象化**：五个哲学家也就是5个线程，五根筷子也就是5个临界资源。因为哲学家想要进餐，必须要同时获得左边和右边的筷子，这就是要同时进入两个临界区（使用临界资源），才可以进餐。
 
-教程：[Linux终端环境配置 | GeekHour](https://www.geekhour.net/2023/10/21/linux-terminal/)
+因为是五只筷子为临界资源，因此设置五个**信号量**即可。
 
-### 配置终端环境
+> 错误示例
 
-#### 3.1 安装依赖工具
+定义互斥信号量数组 `mutex[5]={1,1,1,1,1}` 用于实现对 5 个筷子的互斥访问。
 
-首先我们需要安装一些必要的支持工具，包括wget、git、curl和vim等等，
+并对哲学家按 0~4 编号， 哲学家 i 左边 的筷子编号为 i ， 右边的筷子编号为 `( i +1)%5` 。
 
-```sh
-sudo apt install wget git curl vim -y
+```c
+semaphore mutex[5] = {1,1,1,1,1}; 		//初始化信号量
+ 
+void philosopher(int i){
+  while(1){
+    //thinking			//思考
+    P(mutex[i]);        //判断哲学家左边的筷子是否可用
+    P(mutex[(i+1)%5]);  //判断哲学家右边的筷子是否可用
+    //...
+    //eat		        //进餐
+    //...
+    V(mutex[i]);        //退出临界区，允许别的进程操作缓冲池
+    V(mutex[(i+1)%5]);  //缓冲池中非空的缓冲区数量加1，可以唤醒等待的消费者进程
+  };
+}
 ```
 
 
 
-3.2 安装zsh
-连接成功之后就可以开始配置终端环境了，首先我们来把当前的shell切换成zsh，ubuntu系统默认的shell是bash，可以使用echo $SHELL命令来查看当前使用的shell，zsh是bash的一个替代品，它的功能更加强大和丰富，可以使用cat /etc/shells来查看支持的shell
-
-```sh
-$ cat /etc/shells
-/bin/sh
-/bin/bash
-/usr/bin/sh
-/usr/bin/bash
-/usr/bin/zsh
-/bin/zsh
-/bin/ksh
-/bin/rksh
-/usr/bin/ksh
-/usr/bin/rksh
-/bin/csh
-/bin/tcsh
-/usr/bin/csh
-/usr/bin/tcsh
-```
-
-如果结果中没有zsh的话就需要使用下面的命令来安装一下：
-
-```
-sudo apt install zsh -y
-
-```
+这个例子会造成**死锁**问题：那就是当所以哲学家同时拿起左边的筷子，那么导致临界资源不足，导致所有哲学家被阻塞，造成程序死锁。
 
 
 
-#### 3.3 安装字体
+> 解决方案：
 
-终端的一些iconfont需要一些特殊字体才能完美显示，推荐使用Nerd字体，官网：nerdfonts.com/
-powerlevel10k主题推荐使用MesloLGS-Nerd字体，一般在初次安装配置主题的时候会默认提示安装，但是如果没有正常安装的话也可以使用下面的内容来手动安装一下：MesloLGS字体ttf文件下载地址：
+==避免死锁==的四个条件；
 
-```sh
-wget https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf &&
-wget https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf  &&
-wget https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf  &&
-wget https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf
-```
+1. 循环等待条件 （互相持有资源而等待彼此的释放）
+2. 请求与保持条件
+3. 不可剥夺条件
+4. 互斥条件
 
-或者Mac也可以使用Homebrew来安装
+==方案设计==：
 
-```sh
-# Mac homebrew
-brew tap homebrew/cask-fonts &&
-brew install --cask font-<FONT NAME>-nerd-font
+1. 至多只允许有四位哲学家同时去拿左边的筷子，**最终能保证至少有一位哲学家能够进餐**，并在用餐完毕后能释放他占用的筷子，从而使别的哲学家能够进餐；
 
-e.g.
-brew tap homebrew/cask-fonts
-brew install --cask font-code-new-roman-nerd-font
+2. **仅当哲学家的左、右两支筷子可用时**，才允许他拿起筷子；
+
+   
+
+==方案一==：控制哲学家就餐数量（**破坏循环等待条件**）
+
+```c
+semaphore mutex[5] = {1,1,1,1,1}; 		//初始化信号量
+semaphore count = 4;	//控制最多允许四位哲学家同时进餐
+ 
+void philosopher(int i){
+  while(1){
+    //thinking		//思考
+    p(count);		//判断是否超过四人准备进餐
+    P(mutex[i]);	//判断缓冲池中是否仍有空闲的缓冲区
+    P(mutex[(i+1)%5]);//判断是否可以进入临界区（操作缓冲池）
+    //...
+    //eat			//进餐
+    //...
+    V(&mutex[i]);//退出临界区，允许别的进程操作缓冲池
+    V(&mutex[(i+1)%5]);//缓冲池中非空的缓冲区数量加1，可以唤醒等待的消费者进程
+    V(&count);//用餐完毕，别的哲学家可以开始进餐
+  }
+}
 ```
 
 
 
+==方法二==：同时拿起左右的叉子 （**破坏请求与保持条件**）
 
-安装完成之后再系统设置或者各个软件比如终端或者VSCode上把字体设置为MesloLGS NF就可以了。
+```c
+semaphore mutex[5]={1,1,1,1,1}; 
+semaphore tmutex = 1 ;          // 互斥地取筷子 
+void philosopher(int i){		//i 号哲学家的进程 
+    while(1) 
+    { 
+        P(&tmutex) ; 
+        P(&mutex[i]) ;     		// 拿左 
+        P(&mutex[(i+1)%5] ) ; 	// 拿右 
+        V(&tmutex); 
 
-如果是没有安装KDE或者Gnome图形界面的Linux的话，可以使用下面的命令来设置一下：
-
-```sh
-# Linux安装字体
-
-sudo cp ttf/*.ttf /usr/share/fonts/truetype/
-
-# 安装fontconfig
-
-sudo apt install fontconfig
-
-# 刷新字体缓存
-
-fc-cache -fv
+        V(&mutex[i]) ;       	// 放左 
+        V(&mutex[(i+1)%5] ) ; 	// 放右 
+    } 
+}
 ```
 
 
 
-#### 3.4 安装Oh-My-Zsh
+### 四、和尚打水问题(多生产者多消费者)
 
-执行下面的语句就可以安装了。
+> 问题描述：
 
-```
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-
-```
-
-慢或者失败的小伙伴可以换成国内源:
-
-```
-wget https://gitee.com/mirrors/oh-my-zsh/raw/master/tools/install.sh
-```
+某寺庙，有小和尚和老和尚若干，有一个水缸，由小和尚提水入缸供老和尚饮用。水缸可以容纳10桶水，水取自同一口井中，由于水井口窄，每次只能容纳一个水桶取水。水桶总数为n个。每次入水、取水仅为一桶，且不可同时进行。
 
 
 
-下载之后给install.sh添加执行权限：
+> 抽象问题：
 
-```
-chmod +x install.sh
+这里的问题比普通的生产者消-费者模型不同的点，在于处理水缸(缓冲区)这个共享资源外，还有水桶这个共享资源，且对于水桶老和尚和新和尚是互斥的。而且用桶取井的水和缸的水都只能一次用一个桶。
 
-```
+信号量设置：
 
-然后还需要修改一下远程仓库地址：
-使用vim打开install.sh文件(vim install.sh)后，找到以下部分：
+- `slots`：水缸的可以容纳的水的量，初始化为10。
+- `items`：已经放入水缸的水量，初始化为0。
+- `buckets`：水桶数，初始化为10。
+- `pmutex`：互斥锁，小和尚对缸进行操作
+- `gmutex`：互斥锁，取水操作入水和取水为一桶
 
-```sh
-# Default settings
+```c
+sem_t slots = 10, items = 0,buckets = 10;
+sem_t pmutex = 1, gmutex = 1;
+young_monk(){//生产者
+    while(1){
+        P(&slots);
+        P(&buckets);
+            
+        P(&gmutex);
+        //从井里面取水
+        V(&gmutex);
+        
+        P(&pmutex);
+        //将水放入杠里
+        V(&pmutex);
+        
+        V(&buckets);
+        V(&items);
+    }
+}
 
-ZSH=${ZSH:-~/.oh-my-zsh}
-REPO=${REPO:-ohmyzsh/ohmyzsh}
-REMOTE=${REMOTE:-https://github.com/${REPO}.git}
-BRANCH=${BRANCH:-master}
-```
+old_monk(){//消费者
+    while(1){
+        P(&items);
+        P(&buckets);
 
-将中间两行修改为下面这样，使用gitee镜像：
-
-```sh
-REPO=${REPO:-mirrors/ohmyzsh}
-REMOTE=${REMOTE:-https://gitee.com/${REPO}.git}
-```
-
-
-
-然后保存退出：`:wq`
-再执行一下，一般就应该安装好了。
-
-将系统默认shell切换为zsh
-
-```sh
-# 切换默认shell
-
-chsh -s $(which zsh)
-
-# 确认
-
-echo $SHELL
-```
-
-
-
-#### 3.5 安装Zsh主题和插件
-
-```sh
-# powerlevel10k主题
-
-git clone https://github.com/romkatv/powerlevel10k.git $ZSH_CUSTOM/themes/powerlevel10k
-
-# zsh-autosuggestions自动提示插件
-
-git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-
-# zsh-syntax-highlighting语法高亮插件
-
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-
-# 配置powerlevel10k
-
-p10k configure
+        P(&pmutex);
+        //从缸里取水
+        V(&pmutex);
+        
+        
+        V(&buckets);
+        V(&slots);
+    }
+}
 ```
 
 
 
 
-编辑~/.zshrc文件启用插件和主题
 
-```sh
-# 修改主题
+### 五、吃水果问题(多生产者多消费者)
 
-ZSH_THEME="powerlevel10k/powerlevel10k"
+> 问题描述：
 
-# 启用插件
+桌上有一只盘子,最多可容纳一个水果,每次只能放入/取出一个水果。父亲专向盘子中放苹果(apple),母亲专向盘子中放橘子(orange),儿子专等吃盘子中的橘子,女儿专等吃盘子里的苹果。试设计信号量并使用P、V操作同步父,母、子、女进程。
 
-plugins=(
-  git
-  zsh-autosuggestions
-  zsh-syntax-highlighting
-)
+![img](./assets/7a7f21c2896840179c0b97d2dfd3b107.png)
+
+> 问题抽象
+
+互斥关系： 对缓冲区（盘子） 的访问要互斥地进行
+
+同步关系 （ 一前一后） ：
+
+1. 父亲将苹果放入盘子后， 女儿才能取苹果
+2. 母亲将橘子放入盘子后， 儿子才能取橘子
+3. 只有盘子为空时， 父亲或母亲才能放入水果 （“盘子为空”这个事件可以由儿子或女儿触 发， 事件发生后才允许父亲或母亲放水果）
+
+
+
+```c
+sem_t mutex = 1;
+sem_t plate = 1;//相当于slots
+sem_t apple = 0;
+sem_t orange = 0;//盘子中
+
+dad(){
+    while(1){
+        P(plate);
+        //准备苹果
+        P(&mutex);
+        //放入盘中
+        V(&mutex);
+        V(apple);
+    }
+}
+
+mom(){
+    while(1){
+        P(plate);
+        //准备橘子
+        P(&mutex);
+        //放入盘中
+        V(&mutex);
+
+        V(orange);
+    }
+}
+
+son(){
+    while(1){
+        P(orange);
+        
+        P(&mutex);
+        //从盘中取走
+        V(&mutex);
+        
+        V(plate);//盘子有了空位
+    }
+}
+
+daughter(){
+    while(1){
+        P(apple);
+        
+        P(&mutex);
+        //从盘中取走
+        V(&mutex);
+        
+        V(plate);//盘子有了空位
+    }
+}
 ```
 
 
 
+> 思考：可不可以不 用互斥信号量mutex？
+
+结论： 即使不设置专门的互斥变量 mutex ， 也不会出现多个进程同时访问盘子的现象。
+
+原因在于：本题中的缓冲区大小为1，在任何时刻，apple、orange、plate三个同步信号量中最多只有一个是1。因此在任何时刻,最多只有一个进程的P操作不会被阻塞,并顺利地进入临界区...
+
+如果缓冲区大小大于 1 ， 就必须专门设置一个互斥信号量 mutex 来保证互斥访问缓冲区。
+
+将上面代码有mutex的删去即可。
+
+### 六、吸烟者问题(单生产者多消费者)
+
+假设一个系统有三个抽烟者进程和一个供应者进程。每个抽烟者不停地卷烟并抽掉它，但是要卷起并抽掉一支烟，抽烟者需要有三种材料：烟草、纸和胶水。三个抽烟者中，第一个拥有烟草、第二个拥有纸、第三个拥有胶水。供应者进程无限地供三种材料，供应者每次将两种材料放桌子上，拥有剩下那种材料的抽烟者卷一根烟并抽掉它，并给供应者进程一个信号告诉完成了，供应者就会放另外两种材料再桌上，这个过程一直重复（让三个抽烟者轮流地抽烟）。
+
+![img](./assets/de2257418cb6464fb8d2b397b6f89517.png)
+
+> 问题抽象化
+
+
+
+生产者可生产的产品一共有三种：
+
+- 桌上有组合一之后第一个抽烟者取走组合一；
+- 桌上有组合二之后第二个抽烟者取走组合二；
+
+- 桌上有组合三之后第三个抽烟者取走组合三；
+
+取走东西使用完成后供应者将下一个组合放到桌子上
+
+==互斥关系==：桌子可以看作是一个**容量为1的缓冲区**，其访问是**互斥的**；
+
+==同步关系==：（从事件的角度来分析）
+
+ 桌上有组合一之后第一个抽烟者取走组合一；
+
+ 桌上有组合二之后第二个抽烟者取走组合二；
+
+ 桌上有组合三之后第三个抽烟者取走组合三；
+
+ 取走东西使用完成后供应者将下一个组合放到桌子上
+
+
+
+```c
+sem_t offer1 = 0,offer2 = 0,offer3 = 0;//桌子上三种者的数量
+sem_t finish = 0; //抽烟是否完成,用于完成通知的效果
+int i = 0; //实现“三个抽烟者轮流抽烟”
+
+provider(){
+    while(1){
+        if(i = 0){
+            //将组合1放桌上
+            V(&offer1);
+        }else if(i = 1){
+            //将组合2放桌上
+            V(&offer2);
+        }else{
+            //将组合3放桌上
+            V(&offer3);
+        }
+        i = (i+1)%3;
+        P(finish);
+    }
+}
+
+smoker1(){
+    while(1){
+        P(&offer1);
+    	//拿走组合1，抽烟
+        V(&finish);
+    }
+}
+
+smoker2(){
+    while(1){
+        P(&offer2);
+    	//拿走组合2，抽烟
+        V(&finish);
+    }
+}
+
+smoker3(){
+    while(1){
+        P(&offer3);
+    	//拿走组合3，抽烟
+        V(&finish);
+    }
+}
+```
+
+
+
+吸烟者问题可以为我们解决“可以生产多个产品的单生产者”问题提供一个思路。
+
+
+
+### 七、理发师睡觉理发(单生产者多消费者)
+
+> 问题描述：
+
+假设有一个理发店只有一个理发师，一张理发时坐的椅子，若干张普通椅子顾客供等候时坐。没有顾客时，理发师就坐在理发的椅子上睡觉。顾客一到，他不是叫醒理发师，就是离开。如果理发师没有睡觉，而在为别人理发，他就会坐下来等候。如果所有的椅子都坐满了人，最后来的顾客就会离开。 
+
+> 解决方案：
+
+最常见的解决方案就是使用三个信号量（Semaphore）：
+
+一个给顾客信号量，一个理发师信号量（看他自己是不是闲着），第三个是互斥信号。
+
+一位顾客来了，他想拿到互斥信号量，他就等着直到拿到为止。顾客拿到互斥信号量后，会去查看是否有空着的椅子（可能是等候的椅子，也可能是理发时坐的那张椅子）。 
+
+如果没有一张是空着的，他就走了。如果他找到了一张椅子，就会让空椅子的数量减少一张，这位顾客接下来就使用自己的信号量叫醒理发师。
+
+这样，互斥信号标就释放出来供其他顾客或理发师使用。如果理发师在忙，这位顾客就会等。理发师就会进入了一个永久的等候循环，等着被在等候的顾客唤醒。一旦他醒过来，他会给所有在等候的顾客发信号，让他们依次理发。
+
+```c
+sem_t customers = 0; 
+sem_t barbers = 0;  
+sem_t mutex = 1;  // 椅子是理发师和顾客进程都可以访问的临界区 
+int chair = N;       //所有的椅子数量  
+ 
+barber(){  
+    While(1){        //持续不断地循环  
+          P(customers); //试图为一位顾客服务，如果没有他就睡觉（进程阻塞）  
+          P(mutex);     //如果有顾客，这时他被叫醒（理发师进程被唤醒），要修改空椅子的数量  
+          chair++;      //一张椅子空了出来  
+          V(barbers);  //现在有一个醒着的理发师，理发师准备理发.
+                       //多个顾客可以竞争理发师互斥量，但是只有一个顾客进程被唤醒并得到服务  
+          V(mutex);   //释放椅子互斥量，使得进店的顾客可以访问椅子的数量以决定是否进店等待 
+          cut_hair();
+    }  
+}
+ 
+customer_i(){   
+    P(mutex);     //想坐到一张椅子上  
+    if (chair > 0){ 
+        chair--;        //顾客坐到一张椅子上了  
+        V(customers);   //通知理发师，有一位顾客来了  
+        V(mutex);       //顾客已经坐在椅子上等待了，访问椅子结束，释放互斥量  
+        P(barbers);     //该这位顾客理发了，如果理发师还在忙，那么他就等着（顾客进程阻塞）  
+        get_haircut();  //顾客坐下剪头~
+    }
+    else  
+        V(mutex);       //不要忘记释放被锁定的椅子,没椅子，顾客跑了。
+}
+```
+
+
+
+参考：
+
+[PV操作七大经典问题 ](https://blog.csdn.net/weixin_47187147/article/details/122235160)
+
+[C语言实现读者写者问题（写者优先）](https://blog.csdn.net/lllllyt/article/details/80507084)
+
+
+
+## 并发问题
+
+### 线程安全
+
+
+
+
+
+### 可重入性
+
+
+
+
+
+### 线程与库函数
+
+
+
+| 线程不安全    | 线程不安全类 | Linux线程安全版本 |
+| ------------- | ------------ | ----------------- |
+| rand          | 2            | rand_r            |
+| strtok        | 2            | strtok_r          |
+| asctime       | 3            | asctime_r         |
+| ctime         | 3            | ctime_r           |
+| gethostbyname | 3            | gethostbyname_r   |
+| gethostbyaddr | 3            | gethostbyaddr_r   |
+| inet_ntoa     | 3            |                   |
+| localtime     | 3            | localtime_r       |
+
+
+
+### 竞争
+
+
+
+### 死锁

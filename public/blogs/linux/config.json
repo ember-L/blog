@@ -1,7 +1,9 @@
 {
-  "title": "Ubuntu环境美化",
-  "tags": [],
-  "date": "2025-12-06",
-  "summary": "",
-  "cover": "/blogs/linux/ddbf0cce7eab2822.webp"
+  "title": "Linux并发编程",
+  "tags": [
+    "linux"
+  ],
+  "date": "2025-12-07",
+  "summary": "\n本文介绍线程并发中的信号量对资源共享的控制以及同步机制。",
+  "cover": "/blogs/linux/bd999854830ad69b.webp"
 }
