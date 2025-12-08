@@ -1,11 +1,13 @@
 [
   {
     "slug": "Ember",
-    "title": "八大排序",
-    "tags": [],
+    "title": "双向链表的应用（LRU与LFU）",
+    "tags": [
+      "算法"
+    ],
     "date": "2025-12-08",
     "summary": "",
-    "cover": "/blogs/Ember/6f63cece3ef48e08.webp"
+    "cover": "/blogs/Ember/69a6ad8bf57bfc80.webp"
   },
   {
     "slug": "linux",
